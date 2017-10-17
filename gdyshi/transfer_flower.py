@@ -20,18 +20,18 @@ BOTTLENECK_TENSOR_NAME = 'pool_3/_reshape:0'
 JPEG_DATA_TENSOR_NAME = 'DecodeJpeg/contents:0'
 
 # 下载的谷歌训练好的Inception-v3模型文件目录
-MODEL_DIR = 'model/'
+MODEL_DIR = 'F:\\tmp\\transfer_learning\model'
 
 # 下载的谷歌训练好的Inception-v3模型文件名
 MODEL_FILE = 'tensorflow_inception_graph.pb'
 
 # 因为一个训练数据会被使用多次，所以可以将原始图像通过Inception-v3模型计算得到的特征向量保存在文件中，免去重复的计算。
 # 下面的变量定义了这些文件的存放地址。
-CACHE_DIR = 'tmp/bottleneck/'
+CACHE_DIR = 'F:\\tmp\\transfer_learning\\tmp\\tmpbottleneck'
 
 # 图片数据文件夹。
 # 在这个文件夹中每一个子文件夹代表一个需要区分的类别，每个子文件夹中存放了对应类别的图片。
-INPUT_DATA = 'flower_data/'
+INPUT_DATA = 'F:\\tmp\\transfer_learning\\flower_data'
 
 # 验证的数据百分比
 VALIDATION_PERCENTAGE = 10
@@ -41,7 +41,7 @@ TEST_PERCENTAGE = 10
 # 定义神经网络的设置
 LEARNING_RATE = 0.01
 STEPS = 4000
-BATCH = 100
+BATCH = 5
 
 # 这个函数从数据文件夹中读取所有的图片列表并按训练、验证、测试数据分开。
 # testing_percentage和validation_percentage参数指定了测试数据集和验证数据集的大小。

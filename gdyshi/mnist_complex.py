@@ -106,11 +106,20 @@ def run_training():
     # train_step = tf.train.GradientDescentOptimizer(FLAGS.learning_rate).minimize(loss)
     train_step = tf.train.AdadeltaOptimizer(FLAGS.learning_rate).minimize(loss)
     accuracy = calc_accuracy(y, y_hat)
+
+    saver = tf.train.Saver()
     # 初始化变量
     init = tf.global_variables_initializer()
     # 启动图
     with tf.Session() as sess:
-        sess.run(init)
+        if os.path.exists(FLAGS.variable_file+'.index'):
+            # 从文件中恢复变量
+            saver.restore(sess, FLAGS.variable_file)
+            print("Model restored.")
+        else:
+            print("Model inited.")
+            sess.run(init)
+
 
         for step in range(FLAGS.max_steps):
             start_time = time.time()
@@ -122,6 +131,12 @@ def run_training():
                 batch_xs, batch_ys = get_test_sets(data, FLAGS.batch_size)
                 # accuracy_value = sess.run(accuracy, feed_dict={x: batch_xs, y: batch_ys, keep_prob: 1.0})
                 # print('accuracy=%.2f ' % (accuracy_value))
+            # 存储变量到文件
+            if step % 1000 == 0:
+                save_path = saver.save(sess, FLAGS.variable_file)
+                print("Model saved in file: ", save_path)
+        save_path = saver.save(sess, FLAGS.variable_file)
+        print("Model saved in file: ", save_path)
 
 
 def main(_):
@@ -139,7 +154,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--max_steps',
         type=int,
-        default=300,
+        default=30000,
         help='Number of steps to run trainer.'
     )
     parser.add_argument(
@@ -153,6 +168,12 @@ if __name__ == '__main__':
         type=str,
         default=os.path.join(os.getenv('TEST_TMPDIR', '/tmp'),
                              'tensorflow/mnist/logs/fully_connected_feed'),
+        help='Directory to put the log data.'
+    )
+    parser.add_argument(
+        '--variable_file',
+        type=str,
+        default='E:\ml_service_backup\data\mnist\\variable.ckpt',
         help='Directory to put the log data.'
     )
 

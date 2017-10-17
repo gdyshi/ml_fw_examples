@@ -31,8 +31,10 @@ CACHE_DIR = 'tmp/bottleneck/'
 
 # 图片数据文件夹。
 # 在这个文件夹中每一个子文件夹代表一个需要区分的类别，每个子文件夹中存放了对应类别的图片。
-INPUT_DATA = 'E:\data\\training'
-INPUT_LABLE = 'E:\data\lable'
+# INPUT_DATA = 'E:\data\\training'
+# INPUT_LABLE = 'E:\data\lable'
+INPUT_DATA = 'F:\\tmp\\bdci\\fangyi\\train\\training'
+INPUT_LABLE = 'F:\\tmp\\bdci\\fangyi\\train\lable'
 
 # 验证的数据百分比
 VALIDATION_PERCENTAGE = 10
@@ -44,134 +46,94 @@ LEARNING_RATE = 0.01
 STEPS = 4000
 BATCH = 100
 
+
 # 这个函数从数据文件夹中读取所有的图片列表并按训练、验证、测试数据分开。
 # testing_percentage和validation_percentage参数指定了测试数据集和验证数据集的大小。
 def create_image_lists(testing_percentage, validation_percentage):
     # 得到的所有图片都存在result这个字典(dictionary)里。
     # 这个字典的key为类别的名称，value也是一个字典，字典里存储了所有的图片名称。
     result = {}
-    # 获取当前目录下所有的标记文件
+    data_set = get_data_set()
+    for data in data_set:
+        training_images = []
+        testing_images = []
+        validation_images = []
+        all_images = []
+        for file_name in data_set[data]:
+            all_images.append(file_name)
+            # 随机将数据分到训练数据集、测试数据集和验证数据集。
+            chance = np.random.randint(100)
+            if chance < validation_percentage:
+                validation_images.append(file_name)
+            elif chance < (testing_percentage + validation_percentage):
+                testing_images.append(file_name)
+            else:
+                training_images.append(file_name)
+            # 将当前类别的数据放入结果字典。
+            result[data] = {
+                'training': training_images,
+                'validation': validation_images,
+                'testing': testing_images,
+                'all': all_images,
+            }
+
+        print('label:' + data)
+        print('\ttotal_num:' + str(len(all_images)))
+        print('\ttraining_num:' + str(len(training_images)))
+        print('\tvalidation_num:' + str(len(validation_images)))
+        print('\ttesting_num:' + str(len(testing_images)))
+    return result
+
+
+def get_data_set():
+    data_set = {}
     file_list = []
+    # 获取当前目录下所有的标记文件
     g = os.walk(INPUT_LABLE)
     for paths, _, files in g:
         for file in files:
-            # print( os.path.join(paths,file))
-            filename = os.path.join(paths,file)
+            filename = os.path.join(paths, file)
             file_list.append(filename)
-    # print(file_list)
     huochuan_list = []
     youlun_list = []
     youting_list = []
     yuchuan_list = []
-    # 通过文件内容获取类别的名称。
     for file in file_list:
         f = open(file)  # 返回一个文件对象
         line = f.readline()  # 调用文件的 readline()方法
+        # 通过文件内容获取类别的名称。
         while line:
             listFromLine = line.split(' ')
-            if('huochuan' == listFromLine[1]):
-                huochuan_list.append(listFromLine[0])
-            if('youlun' == listFromLine[1]):
-                youlun_list.append(listFromLine[0])
-            if('youting' == listFromLine[1]):
-                youting_list.append(listFromLine[0])
-            if('yuchuan' == listFromLine[1]):
-                yuchuan_list.append(listFromLine[0])
+            if ('huochuan' == listFromLine[1]):
+                huochuan_list.append(get_real_img_name(listFromLine[0]))
+            if ('youlun' == listFromLine[1]):
+                youlun_list.append(get_real_img_name(listFromLine[0]))
+            if ('youting' == listFromLine[1]):
+                youting_list.append(get_real_img_name(listFromLine[0]))
+            if ('yuchuan' == listFromLine[1]):
+                yuchuan_list.append(get_real_img_name(listFromLine[0]))
             line = f.readline()
         f.close()
-    # print('huochuan 数量:'+ len(huochuan_list))
-    # print('youlun 数量:'+ len(youlun_list))
-    # print('youting 数量:'+ len(youting_list))
-    # print('yuchuan 数量:'+len(yuchuan_list))
-    print(len(huochuan_list))
-    print(len(youlun_list))
-    print(len(youting_list))
-    print(len(yuchuan_list))
-    # 初始化当前类别的训练数据集、测试数据集和验证数据集
-    training_images = []
-    testing_images = []
-    validation_images = []
-    for file_name in huochuan_list:
-        base_name = os.path.basename(file_name)
-        # 随机将数据分到训练数据集、测试数据集和验证数据集。
-        chance = np.random.randint(100)
-        if chance < validation_percentage:
-            validation_images.append(base_name)
-        elif chance < (testing_percentage + validation_percentage):
-            testing_images.append(base_name)
-        else:
-            training_images.append(base_name)
-        # 将当前类别的数据放入结果字典。
-        result['huochuan'] = {
-            # 'dir': dir_name,
-            'training': training_images,
-            'testing': testing_images,
-            'validation': validation_images
-            }
-    training_images = []
-    testing_images = []
-    validation_images = []
-    for file_name in youlun_list:
-        base_name = os.path.basename(file_name)
-        # 随机将数据分到训练数据集、测试数据集和验证数据集。
-        chance = np.random.randint(100)
-        if chance < validation_percentage:
-            validation_images.append(base_name)
-        elif chance < (testing_percentage + validation_percentage):
-            testing_images.append(base_name)
-        else:
-            training_images.append(base_name)
-        # 将当前类别的数据放入结果字典。
-        result['youlun'] = {
-            # 'dir': dir_name,
-            'training': training_images,
-            'testing': testing_images,
-            'validation': validation_images
-        }
-    training_images = []
-    testing_images = []
-    validation_images = []
-    for file_name in youting_list:
-        base_name = os.path.basename(file_name)
-        # 随机将数据分到训练数据集、测试数据集和验证数据集。
-        chance = np.random.randint(100)
-        if chance < validation_percentage:
-            validation_images.append(base_name)
-        elif chance < (testing_percentage + validation_percentage):
-            testing_images.append(base_name)
-        else:
-            training_images.append(base_name)
-        # 将当前类别的数据放入结果字典。
-        result['youting'] = {
-            # 'dir': dir_name,
-            'training': training_images,
-            'testing': testing_images,
-            'validation': validation_images
-        }
-    training_images = []
-    testing_images = []
-    validation_images = []
-    for file_name in yuchuan_list:
-        base_name = os.path.basename(file_name)
-        # 随机将数据分到训练数据集、测试数据集和验证数据集。
-        chance = np.random.randint(100)
-        if chance < validation_percentage:
-            validation_images.append(base_name)
-        elif chance < (testing_percentage + validation_percentage):
-            testing_images.append(base_name)
-        else:
-            training_images.append(base_name)
-        # 将当前类别的数据放入结果字典。
-        result['yuchuan'] = {
-            # 'dir': dir_name,
-            'training': training_images,
-            'testing': testing_images,
-            'validation': validation_images
-        }
-    # # 返回整理好的所有数据
-    print(result)
-    return result
+    data_set['huochuan'] = huochuan_list
+    data_set['youlun'] = youlun_list
+    data_set['youting'] = youting_list
+    data_set['yuchuan'] = yuchuan_list
+    return data_set
 
+# 替换标记文件中记录的图片路径为真实的图片路径
+def get_real_img_name(old_path):
+    new_path = ''
+    if 0 == old_path.find('D:\CCF样本和标记工具\CCFModule'):
+        new_path = old_path.replace('D:\CCF样本和标记工具\CCFModule', INPUT_DATA)
+    elif 0 == old_path.find('E:\CCF样本'):
+        new_path = old_path.replace('E:\CCF样本', INPUT_DATA)
+    elif 0 == old_path.find('E:\CCFModule'):
+        new_path = old_path.replace('E:\CCFModule', INPUT_DATA)
+    elif 0 == old_path.find('E:\CCFModel'):
+        new_path = old_path.replace('E:\CCFModel', INPUT_DATA)
+    else:
+        print('error replace path:' + old_path)
+    return new_path
 
 
 # 这个函数通过类别名称、所属数据集和图片编号获取一张图片的地址。
@@ -272,7 +234,7 @@ def get_test_bottlenecks(sess, image_lists, n_classes, jpeg_data_tensor, bottlen
             # 通过Inception-v3模型计算图片对应的特征向量，并将其加入最终数据的列表。
             bottleneck = get_or_create_bottleneck(sess, image_lists, label_name, index, category,
                                                   jpeg_data_tensor, bottleneck_tensor)
-            ground_truth = np.zeros(n_classes, dtype = np.float32)
+            ground_truth = np.zeros(n_classes, dtype=np.float32)
             ground_truth[label_index] = 1.0
             bottlenecks.append(bottleneck)
             ground_truths.append(ground_truth)
