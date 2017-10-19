@@ -4,9 +4,12 @@
 import glob
 import os.path
 import random
+
 import numpy as np
+import shutil
 import tensorflow as tf
 from tensorflow.python.platform import gfile
+from PIL import Image
 
 # Inception-v3模型瓶颈层的节点个数
 BOTTLENECK_TENSOR_SIZE = 2048
@@ -19,7 +22,7 @@ BOTTLENECK_TENSOR_NAME = 'pool_3/_reshape:0'
 # 图像输入张量所对应的名称。
 JPEG_DATA_TENSOR_NAME = 'DecodeJpeg/contents:0'
 
-COMMON_DIR = 'F:\\tmp\\bdci\\fangyi'
+COMMON_DIR = 'E:\data'
 
 # 下载的谷歌训练好的Inception-v3模型文件目录
 MODEL_DIR = COMMON_DIR + '\model'
@@ -34,10 +37,11 @@ CACHE_DIR = COMMON_DIR + '\\train\\bottleneck'
 PARM_FILE = COMMON_DIR + '\\train\parm\\variable.ckpt'
 # 图片数据文件夹。
 # 在这个文件夹中每一个子文件夹代表一个需要区分的类别，每个子文件夹中存放了对应类别的图片。
-# INPUT_DATA = 'E:\data\\training'
-# INPUT_LABLE = 'E:\data\lable'
 INPUT_DATA = COMMON_DIR + '\\train\\training'
 INPUT_LABLE = COMMON_DIR + '\\train\lable'
+TEMP_DATA_ALL = COMMON_DIR + '\\train\\tmp\\all'
+TEMP_DATA_TRAIN = COMMON_DIR + '\\train\\tmp\\train'
+TEMP_DATA_TEST = COMMON_DIR + '\\train\\tmp\\test'
 
 # 验证的数据百分比
 VALIDATION_PERCENTAGE = 10
@@ -45,9 +49,63 @@ VALIDATION_PERCENTAGE = 10
 TEST_PERCENTAGE = 10
 
 # 定义神经网络的设置
-LEARNING_RATE = 0.01
-STEPS = 4000
-BATCH = 2
+LEARNING_RATE = 0.005
+STEPS = 10000
+BATCH = 100
+
+
+def format_data_set():
+    file_list = []
+
+    # 获取当前目录下所有的标记文件
+    g = os.walk(INPUT_LABLE)
+    # print(g)
+    for paths, _, files in g:
+        for file in files:
+            filename = os.path.join(paths, file)
+            file_list.append(filename)
+    for file in file_list:
+        f = open(file)  # 返回一个文件对象
+        line_num=0
+        line = f.readline()  # 调用文件的 readline()方法
+        # 通过文件内容获取类别的名称。
+        while line:
+            line_num = line_num+1
+            listFromLine = line.lstrip().rstrip().split(' ')
+            # 检查label是否是6段
+            if (6 != len(listFromLine)):
+                print('error: label not 6:' + file+'but '+str(len(listFromLine))+'line:'+str(line_num))
+                print(listFromLine[6])
+                exit(-1)
+            # 检查文件名与label是否一致
+            if -1 == file.find(listFromLine[1]):
+                print('error: label not matched file name:' + file+'line:'+str(line_num))
+                exit(-1)
+            # 检查对应图片是否存在
+            image_file = get_real_img_name(listFromLine[0])
+            if False == os.path.exists(image_file):
+                print('error: image:' + image_file + ' not found from label:' + file+'line:'+str(line_num))
+                exit(-1)
+            # 拷贝有效图片
+            to_image_file = image_file.replace(INPUT_DATA,TEMP_DATA_ALL)
+            if not os.path.exists(os.path.dirname(to_image_file)):
+                os.makedirs(os.path.dirname(to_image_file))
+            if not os.path.exists(to_image_file):
+                print('copy file from '+image_file+'to'+to_image_file)
+                shutil.copyfile(image_file,to_image_file)
+            to_label_file = file.replace(INPUT_LABLE, TEMP_DATA_ALL)
+            if not os.path.exists(to_label_file):
+                print('copy file from '+file+'to'+to_label_file)
+                shutil.copyfile(file,to_label_file)
+
+            # 检查label标签是否超出图片大小
+            img = Image.open(image_file)
+            x, y = img.size
+            if (x < int(listFromLine[2]) | x < int(listFromLine[4]) | y < int(listFromLine[3]) | y < int(listFromLine[5])):
+                print('error: label outofrange, img:' + image_file+'line:'+str(line_num))
+                exit(-1)
+            line = f.readline()
+        f.close()
 
 
 # 这个函数从数据文件夹中读取所有的图片列表并按训练、验证、测试数据分开。
@@ -247,6 +305,8 @@ def get_test_bottlenecks(sess, image_lists, n_classes, jpeg_data_tensor, bottlen
 
 
 def main(_):
+    # 格式化数据集
+    # format_data_set()
     # 读取所有图片。
     image_lists = create_image_lists(TEST_PERCENTAGE, VALIDATION_PERCENTAGE)
     print(image_lists.keys())
@@ -285,14 +345,14 @@ def main(_):
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
-        if os.path.exists(PARM_FILE + '.index'):
-            # 从文件中恢复变量
-            saver.restore(sess, PARM_FILE)
-            print("Model restored.")
-        else:
-            print("Model inited.")
-            # sess.run(init)
-            tf.global_variables_initializer().run()
+        # if os.path.exists(PARM_FILE + '.index'):
+        #     # 从文件中恢复变量
+        #     saver.restore(sess, PARM_FILE)
+        #     print("Model restored.")
+        # else:
+        #     print("Model inited.")
+        #     # sess.run(init)
+        tf.global_variables_initializer().run()
 
         # 训练过程
         for i in range(STEPS):
@@ -309,10 +369,10 @@ def main(_):
                     bottleneck_input: validation_bottlenecks, ground_truth_input: validation_ground_truth})
                 print('Step %d: Validation accuracy on random sampled %d examples = %.1f%%'
                       % (i, BATCH, validation_accuracy * 100))
-            # 存储变量到文件
-            if i % 1000 == 0:
-                save_path = saver.save(sess, PARM_FILE)
-                print("Model saved in file: ", save_path)
+            # # 存储变量到文件
+            # if i % 1000 == 0:
+            #     save_path = saver.save(sess, PARM_FILE)
+            #     print("Model saved in file: ", save_path)
 
         # 在最后的测试数据上测试正确率
         test_bottlenecks, test_ground_truth = get_test_bottlenecks(sess, image_lists, n_classes,
