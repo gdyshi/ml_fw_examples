@@ -23,6 +23,7 @@ BOTTLENECK_TENSOR_NAME = 'pool_3/_reshape:0'
 JPEG_DATA_TENSOR_NAME = 'DecodeJpeg/contents:0'
 
 COMMON_DIR = 'E:\data'
+COMMON_DIR = 'F:\\tmp\\bdci\\fangyi'
 
 # 下载的谷歌训练好的Inception-v3模型文件目录
 MODEL_DIR = COMMON_DIR + '\model'
@@ -66,43 +67,44 @@ def format_data_set():
             file_list.append(filename)
     for file in file_list:
         f = open(file)  # 返回一个文件对象
-        line_num=0
+        line_num = 0
         line = f.readline()  # 调用文件的 readline()方法
         # 通过文件内容获取类别的名称。
         while line:
-            line_num = line_num+1
+            line_num = line_num + 1
             listFromLine = line.lstrip().rstrip().split(' ')
             # 检查label是否是6段
             if (6 != len(listFromLine)):
-                print('error: label not 6:' + file+'but '+str(len(listFromLine))+'line:'+str(line_num))
+                print('error: label not 6:' + file + 'but ' + str(len(listFromLine)) + 'line:' + str(line_num))
                 print(listFromLine[6])
                 exit(-1)
             # 检查文件名与label是否一致
             if -1 == file.find(listFromLine[1]):
-                print('error: label not matched file name:' + file+'line:'+str(line_num))
+                print('error: label not matched file name:' + file + 'line:' + str(line_num))
                 exit(-1)
             # 检查对应图片是否存在
             image_file = get_real_img_name(listFromLine[0])
             if False == os.path.exists(image_file):
-                print('error: image:' + image_file + ' not found from label:' + file+'line:'+str(line_num))
+                print('error: image:' + image_file + ' not found from label:' + file + 'line:' + str(line_num))
                 exit(-1)
             # 拷贝有效图片
-            to_image_file = image_file.replace(INPUT_DATA,TEMP_DATA_ALL)
+            to_image_file = image_file.replace(INPUT_DATA, TEMP_DATA_ALL)
             if not os.path.exists(os.path.dirname(to_image_file)):
                 os.makedirs(os.path.dirname(to_image_file))
             if not os.path.exists(to_image_file):
-                print('copy file from '+image_file+'to'+to_image_file)
-                shutil.copyfile(image_file,to_image_file)
+                print('copy file from ' + image_file + ' to ' + to_image_file)
+                shutil.copyfile(image_file, to_image_file)
             to_label_file = file.replace(INPUT_LABLE, TEMP_DATA_ALL)
             if not os.path.exists(to_label_file):
-                print('copy file from '+file+'to'+to_label_file)
-                shutil.copyfile(file,to_label_file)
+                print('copy file from ' + file + 'to' + to_label_file)
+                shutil.copyfile(file, to_label_file)
 
             # 检查label标签是否超出图片大小
             img = Image.open(image_file)
             x, y = img.size
-            if (x < int(listFromLine[2]) | x < int(listFromLine[4]) | y < int(listFromLine[3]) | y < int(listFromLine[5])):
-                print('error: label outofrange, img:' + image_file+'line:'+str(line_num))
+            if (x < int(listFromLine[2]) | x < int(listFromLine[4]) | y < int(listFromLine[3]) | y < int(
+                    listFromLine[5])):
+                print('error: label outofrange, img:' + image_file + 'line:' + str(line_num))
                 exit(-1)
             line = f.readline()
         f.close()
@@ -143,6 +145,27 @@ def create_image_lists(testing_percentage, validation_percentage):
         print('\ttraining_num:' + str(len(training_images)))
         print('\tvalidation_num:' + str(len(validation_images)))
         print('\ttesting_num:' + str(len(testing_images)))
+    return result
+
+
+# 这个函数从数据文件夹中读取所有的图片列表并按训练、验证、测试数据分开。
+# testing_percentage和validation_percentage参数指定了测试数据集和验证数据集的大小。
+def create_one_label_lists(label_name, testing_percentage, validation_percentage):
+    # 得到的所有图片都存在result这个字典(dictionary)里。
+    # 这个字典的key为类别的名称，value也是一个字典，字典里存储了所有的图片名称。
+    result = {}
+    data_set = get_data_set()
+    image_set = {}
+    for data in data_set:
+        for file_name in data_set[data]:
+            if file_name in image_set.keys():
+                image_set[file_name].append(data)
+            else:
+                image_set[file_name] = [data]
+
+    print('total_num:' + str(len(image_set.keys())))
+    for image in image_set:
+        print(image+str(image_set[image]))
     return result
 
 
@@ -308,78 +331,79 @@ def main(_):
     # 格式化数据集
     # format_data_set()
     # 读取所有图片。
-    image_lists = create_image_lists(TEST_PERCENTAGE, VALIDATION_PERCENTAGE)
-    print(image_lists.keys())
-    print(len(image_lists.keys()))
-    n_classes = len(image_lists.keys())
-    # 读取已经训练好的Inception-v3模型。
-    # 谷歌训练好的模型保存在了GraphDef Protocol Buffer中，里面保存了每一个节点取值的计算方法以及变量的取值。
-    # TensorFlow模型持久化的问题在第5章中有详细的介绍。
-    with gfile.FastGFile(os.path.join(MODEL_DIR, MODEL_FILE), 'rb') as f:
-        graph_def = tf.GraphDef()
-        graph_def.ParseFromString(f.read())
-    # 加载读取的Inception-v3模型，并返回数据输入所对应的张量以及计算瓶颈层结果所对应的张量。
-    bottleneck_tensor, jpeg_data_tensor = tf.import_graph_def(graph_def, return_elements=[BOTTLENECK_TENSOR_NAME,
-                                                                                          JPEG_DATA_TENSOR_NAME])
-    # 定义新的神经网络输入，这个输入就是新的图片经过Inception-v3模型前向传播到达瓶颈层时的结点取值。
-    # 可以将这个过程类似的理解为一种特征提取。
-    bottleneck_input = tf.placeholder(tf.float32, [None, BOTTLENECK_TENSOR_SIZE], name='BottleneckInputPlaceholder')
-    # 定义新的标准答案输入
-    ground_truth_input = tf.placeholder(tf.float32, [None, n_classes], name='GroundTruthInput')
-    # 定义一层全连接层来解决新的图片分类问题。
-    # 因为训练好的Inception-v3模型已经将原始的图片抽象为了更加容易分类的特征向量了，所以不需要再训练那么复杂的神经网络来完成这个新的分类任务。
-    with tf.name_scope('final_training_ops'):
-        weights = tf.Variable(tf.truncated_normal([BOTTLENECK_TENSOR_SIZE, n_classes], stddev=0.001))
-        biases = tf.Variable(tf.zeros([n_classes]))
-        logits = tf.matmul(bottleneck_input, weights) + biases
-        final_tensor = tf.nn.softmax(logits)
-    # 定义交叉熵损失函数
-    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=ground_truth_input)
-    cross_entropy_mean = tf.reduce_mean(cross_entropy)
-    train_step = tf.train.GradientDescentOptimizer(LEARNING_RATE).minimize(cross_entropy_mean)
-    # 计算正确率
-    with tf.name_scope('evaluation'):
-        correct_prediction = tf.equal(tf.argmax(final_tensor, 1), tf.argmax(ground_truth_input, 1))
-        evaluation_step = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-
-    saver = tf.train.Saver()
-
-    with tf.Session() as sess:
-        # if os.path.exists(PARM_FILE + '.index'):
-        #     # 从文件中恢复变量
-        #     saver.restore(sess, PARM_FILE)
-        #     print("Model restored.")
-        # else:
-        #     print("Model inited.")
-        #     # sess.run(init)
-        tf.global_variables_initializer().run()
-
-        # 训练过程
-        for i in range(STEPS):
-            # 每次获取一个batch的训练数据
-            train_bottlenecks, train_ground_truth = get_random_cached_bottlenecks(
-                sess, n_classes, image_lists, BATCH, 'training', jpeg_data_tensor, bottleneck_tensor)
-            sess.run(train_step,
-                     feed_dict={bottleneck_input: train_bottlenecks, ground_truth_input: train_ground_truth})
-            # 在验证集上测试正确率。
-            if i % 100 == 0 or i + 1 == STEPS:
-                validation_bottlenecks, validation_ground_truth = get_random_cached_bottlenecks(
-                    sess, n_classes, image_lists, BATCH, 'validation', jpeg_data_tensor, bottleneck_tensor)
-                validation_accuracy = sess.run(evaluation_step, feed_dict={
-                    bottleneck_input: validation_bottlenecks, ground_truth_input: validation_ground_truth})
-                print('Step %d: Validation accuracy on random sampled %d examples = %.1f%%'
-                      % (i, BATCH, validation_accuracy * 100))
-            # # 存储变量到文件
-            # if i % 1000 == 0:
-            #     save_path = saver.save(sess, PARM_FILE)
-            #     print("Model saved in file: ", save_path)
-
-        # 在最后的测试数据上测试正确率
-        test_bottlenecks, test_ground_truth = get_test_bottlenecks(sess, image_lists, n_classes,
-                                                                   jpeg_data_tensor, bottleneck_tensor)
-        test_accuracy = sess.run(evaluation_step, feed_dict={bottleneck_input: test_bottlenecks,
-                                                             ground_truth_input: test_ground_truth})
-        print('Final test accuracy = %.1f%%' % (test_accuracy * 100))
+    create_one_label_lists('dddd', TEST_PERCENTAGE, VALIDATION_PERCENTAGE)
+    # image_lists = create_image_lists(TEST_PERCENTAGE, VALIDATION_PERCENTAGE)
+    # print(image_lists.keys())
+    # print(len(image_lists.keys()))
+    # n_classes = len(image_lists.keys())
+    # # 读取已经训练好的Inception-v3模型。
+    # # 谷歌训练好的模型保存在了GraphDef Protocol Buffer中，里面保存了每一个节点取值的计算方法以及变量的取值。
+    # # TensorFlow模型持久化的问题在第5章中有详细的介绍。
+    # with gfile.FastGFile(os.path.join(MODEL_DIR, MODEL_FILE), 'rb') as f:
+    #     graph_def = tf.GraphDef()
+    #     graph_def.ParseFromString(f.read())
+    # # 加载读取的Inception-v3模型，并返回数据输入所对应的张量以及计算瓶颈层结果所对应的张量。
+    # bottleneck_tensor, jpeg_data_tensor = tf.import_graph_def(graph_def, return_elements=[BOTTLENECK_TENSOR_NAME,
+    #                                                                                       JPEG_DATA_TENSOR_NAME])
+    # # 定义新的神经网络输入，这个输入就是新的图片经过Inception-v3模型前向传播到达瓶颈层时的结点取值。
+    # # 可以将这个过程类似的理解为一种特征提取。
+    # bottleneck_input = tf.placeholder(tf.float32, [None, BOTTLENECK_TENSOR_SIZE], name='BottleneckInputPlaceholder')
+    # # 定义新的标准答案输入
+    # ground_truth_input = tf.placeholder(tf.float32, [None, n_classes], name='GroundTruthInput')
+    # # 定义一层全连接层来解决新的图片分类问题。
+    # # 因为训练好的Inception-v3模型已经将原始的图片抽象为了更加容易分类的特征向量了，所以不需要再训练那么复杂的神经网络来完成这个新的分类任务。
+    # with tf.name_scope('final_training_ops'):
+    #     weights = tf.Variable(tf.truncated_normal([BOTTLENECK_TENSOR_SIZE, n_classes], stddev=0.001))
+    #     biases = tf.Variable(tf.zeros([n_classes]))
+    #     logits = tf.matmul(bottleneck_input, weights) + biases
+    #     final_tensor = tf.nn.softmax(logits)
+    # # 定义交叉熵损失函数
+    # cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=ground_truth_input)
+    # cross_entropy_mean = tf.reduce_mean(cross_entropy)
+    # train_step = tf.train.GradientDescentOptimizer(LEARNING_RATE).minimize(cross_entropy_mean)
+    # # 计算正确率
+    # with tf.name_scope('evaluation'):
+    #     correct_prediction = tf.equal(tf.argmax(final_tensor, 1), tf.argmax(ground_truth_input, 1))
+    #     evaluation_step = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    #
+    # saver = tf.train.Saver()
+    #
+    # with tf.Session() as sess:
+    #     # if os.path.exists(PARM_FILE + '.index'):
+    #     #     # 从文件中恢复变量
+    #     #     saver.restore(sess, PARM_FILE)
+    #     #     print("Model restored.")
+    #     # else:
+    #     #     print("Model inited.")
+    #     #     # sess.run(init)
+    #     tf.global_variables_initializer().run()
+    #
+    #     # 训练过程
+    #     for i in range(STEPS):
+    #         # 每次获取一个batch的训练数据
+    #         train_bottlenecks, train_ground_truth = get_random_cached_bottlenecks(
+    #             sess, n_classes, image_lists, BATCH, 'training', jpeg_data_tensor, bottleneck_tensor)
+    #         sess.run(train_step,
+    #                  feed_dict={bottleneck_input: train_bottlenecks, ground_truth_input: train_ground_truth})
+    #         # 在验证集上测试正确率。
+    #         if i % 100 == 0 or i + 1 == STEPS:
+    #             validation_bottlenecks, validation_ground_truth = get_random_cached_bottlenecks(
+    #                 sess, n_classes, image_lists, BATCH, 'validation', jpeg_data_tensor, bottleneck_tensor)
+    #             validation_accuracy = sess.run(evaluation_step, feed_dict={
+    #                 bottleneck_input: validation_bottlenecks, ground_truth_input: validation_ground_truth})
+    #             print('Step %d: Validation accuracy on random sampled %d examples = %.1f%%'
+    #                   % (i, BATCH, validation_accuracy * 100))
+    #             # # 存储变量到文件
+    #             # if i % 1000 == 0:
+    #             #     save_path = saver.save(sess, PARM_FILE)
+    #             #     print("Model saved in file: ", save_path)
+    #
+    #     # 在最后的测试数据上测试正确率
+    #     test_bottlenecks, test_ground_truth = get_test_bottlenecks(sess, image_lists, n_classes,
+    #                                                                jpeg_data_tensor, bottleneck_tensor)
+    #     test_accuracy = sess.run(evaluation_step, feed_dict={bottleneck_input: test_bottlenecks,
+    #                                                          ground_truth_input: test_ground_truth})
+    #     print('Final test accuracy = %.1f%%' % (test_accuracy * 100))
 
 
 if __name__ == '__main__':
