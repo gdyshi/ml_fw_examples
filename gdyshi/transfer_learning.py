@@ -4,7 +4,7 @@
 import glob
 import os.path
 import random
-
+import sqlite3
 import numpy as np
 import shutil
 import tensorflow as tf
@@ -65,66 +65,72 @@ def format_data_set():
         for file in files:
             filename = os.path.join(paths, file)
             file_list.append(filename)
+    if os.path.exists('test.db'):
+        os.remove('test.db')
     conn = sqlite3.connect('test.db')
     c = conn.cursor()
 
-    # c.execute('''CREATE TABLE IMAGE_FILE
-    #        (ID INTEGER PRIMARY KEY     AUTOINCREMENT,
-    #        PATH           TEXT    NOT NULL);''')
-    # c.execute('''CREATE TABLE LABEL
-    #        (ID INTEGER PRIMARY KEY     AUTOINCREMENT,
-    #        IMAGE_ID           INTEGER    NOT NULL,
-    #        CLASSIFY            TEXT     NOT NULL,
-    #        LX        INT NOT NULL,
-    #        LY        INT NOT NULL,
-    #        RX        INT NOT NULL,
-    #        RY        INT NOT NULL);''')
+    c.execute('''CREATE TABLE IMAGE_FILE
+           (ID INTEGER PRIMARY KEY     AUTOINCREMENT,
+           PATH           TEXT    NOT NULL);''')
+    c.execute('''CREATE TABLE LABEL
+           (ID INTEGER PRIMARY KEY     AUTOINCREMENT,
+           IMAGE_ID           INTEGER    NOT NULL,
+           CLASSIFY            TEXT     NOT NULL,
+           LX        INT NOT NULL,
+           LY        INT NOT NULL,
+           RX        INT NOT NULL,
+           RY        INT NOT NULL);''')
 
     # conn.commit()
     for file in file_list:
         f = open(file)  # 返回一个文件对象
-        line_num=0
+        line_num = 0
         line = f.readline()  # 调用文件的 readline()方法
         # 通过文件内容获取类别的名称。
         while line:
-            line_num = line_num+1
+            line_num = line_num + 1
             listFromLine = line.lstrip().rstrip().split(' ')
             # 检查label是否是6段
             if (6 != len(listFromLine)):
-                print('error: label not 6:' + file+'but '+str(len(listFromLine))+'line:'+str(line_num))
+                print('error: label not 6:' + file + 'but ' + str(len(listFromLine)) + 'line:' + str(line_num))
                 print(listFromLine[6])
                 exit(-1)
             # 检查文件名与label是否一致
             if -1 == file.find(listFromLine[1]):
-                print('error: label not matched file name:' + file+'line:'+str(line_num))
+                print('error: label not matched file name:' + file + 'line:' + str(line_num))
                 exit(-1)
             classify = listFromLine[1]
             # 检查对应图片是否存在
             image_file = get_real_img_name(listFromLine[0])
             if False == os.path.exists(image_file):
-                print('error: image:' + image_file + ' not found from label:' + file+'line:'+str(line_num))
+                print('error: image:' + image_file + ' not found from label:' + file + 'line:' + str(line_num))
                 exit(-1)
-            # sqlstr=str("SELECT id  from IMAGE_FILE WHERE PATH=\""+image_file+"\"")
-            # cursor = c.execute(sqlstr)
-            # print(cursor.arraysize)
-            # for row in cursor:
-            #     print("ID = ", row[0])
-            # sqlstr=str("INSERT INTO IMAGE_FILE (PATH) \
-            #       VALUES (\""+image_file+"\" )")
-            # cursor = c.execute(sqlstr)
-            # conn.commit()
+            sqlstr=str("SELECT id  from IMAGE_FILE WHERE PATH=\""+image_file+"\"")
+            cursor = c.execute(sqlstr)
+            result = cursor.fetchone()
+            if result == None:
+                sqlstr = str("INSERT INTO IMAGE_FILE (PATH)  VALUES (\"" + image_file + "\" )")
+                cursor = c.execute(sqlstr)
+                # conn.commit()
+                sqlstr = str("SELECT id  from IMAGE_FILE WHERE PATH=\"" + image_file + "\"")
+                cursor = c.execute(sqlstr)
+                image_id = cursor.fetchone()[0]
 
-            # 拷贝有效图片
-            to_image_file = image_file.replace(INPUT_DATA,TEMP_DATA_ALL)
-            if not os.path.exists(os.path.dirname(to_image_file)):
-                os.makedirs(os.path.dirname(to_image_file))
-            if not os.path.exists(to_image_file):
-                print('copy file from '+image_file+'to'+to_image_file)
-                shutil.copyfile(image_file,to_image_file)
-            to_label_file = file.replace(INPUT_LABLE, TEMP_DATA_ALL)
-            if not os.path.exists(to_label_file):
-                print('copy file from '+file+'to'+to_label_file)
-                shutil.copyfile(file,to_label_file)
+            else:
+                image_id = result[0]
+
+            # # 拷贝有效图片
+            # to_image_file = image_file.replace(INPUT_DATA, TEMP_DATA_ALL)
+            # if not os.path.exists(os.path.dirname(to_image_file)):
+            #     os.makedirs(os.path.dirname(to_image_file))
+            # if not os.path.exists(to_image_file):
+            #     print('copy file from ' + image_file + 'to' + to_image_file)
+            #     shutil.copyfile(image_file, to_image_file)
+            # to_label_file = file.replace(INPUT_LABLE, TEMP_DATA_ALL)
+            # if not os.path.exists(to_label_file):
+            #     print('copy file from ' + file + 'to' + to_label_file)
+            #     shutil.copyfile(file, to_label_file)
 
             # 检查label标签是否超出图片大小
             img = Image.open(image_file)
@@ -133,35 +139,37 @@ def format_data_set():
             ly = int(listFromLine[3])
             rx = int(listFromLine[4])
             ry = int(listFromLine[5])
-            if (x < int(listFromLine[2]) or x < int(listFromLine[4]) or y < int(listFromLine[3]) or y < int(listFromLine[5])):
-                print('error: label outofrange, img:' + file+'line:'+str(line_num))
+            if (x < int(listFromLine[2]) or x < int(listFromLine[4]) or y < int(listFromLine[3]) or y < int(
+                    listFromLine[5])):
+                print('error: label outofrange, img:' + file + 'line:' + str(line_num))
                 # exit(-1)
-            if (x<lx):
-                lx=x
-            if (x<rx):
-                rx=x
-            if (y<ly):
-                ly=x
-            if (y<ry):
-                ry=x
+            if (x < lx):
+                lx = x
+            if (x < rx):
+                rx = x
+            if (y < ly):
+                ly = x
+            if (y < ry):
+                ry = x
             # 检查label标签是否左上右下
-            if (int(listFromLine[3]) < int(listFromLine[2]) or int(listFromLine[5]) < int(listFromLine[4])):
-                print('error: label rect sec, img:' + file+'line:'+str(line_num))
-            if (lx>rx):
-                temp=rx
-                rx=lx
-                lx=temp
-            if (ly>ry):
-                temp=ry
-                ry=ly
-                ly=temp
-            # sqlstr=str("INSERT INTO LABEL (PATH,CLASSIFY,LX,LY,RX,RY) \
-            #       VALUES (\""+image_file+"\", \""+classify+"\", "+str(lx)+", "+str(ly)+", "+str(rx)+", "+str(ry)+" )")
-            # c.execute(sqlstr)
+            if (int(listFromLine[4]) < int(listFromLine[2]) or int(listFromLine[5]) < int(listFromLine[3])):
+                print('error: label rect sec, img:' + file + 'line:' + str(line_num))
+            if (lx > rx):
+                temp = rx
+                rx = lx
+                lx = temp
+            if (ly > ry):
+                temp = ry
+                ry = ly
+                ly = temp
+            sqlstr=str("INSERT INTO LABEL (IMAGE_ID,CLASSIFY,LX,LY,RX,RY) \
+                  VALUES (\""+str(image_id)+"\", \""+classify+"\", "+str(lx)+", "+str(ly)+", "+str(rx)+", "+str(ry)+" )")
+            c.execute(sqlstr)
+            # conn.commit()
             line = f.readline()
         f.close()
-    # conn.commit()
-    # conn.close()
+    conn.commit()
+    conn.close()
 
 
 # 这个函数从数据文件夹中读取所有的图片列表并按训练、验证、测试数据分开。
@@ -201,6 +209,7 @@ def create_image_lists(testing_percentage, validation_percentage):
         print('\ttesting_num:' + str(len(testing_images)))
     return result
 
+
 # 这个函数从数据文件夹中读取所有的图片列表并按训练、验证、测试数据分开。
 # testing_percentage和validation_percentage参数指定了测试数据集和验证数据集的大小。
 def create_image_sets(label, testing_percentage, validation_percentage):
@@ -210,7 +219,7 @@ def create_image_sets(label, testing_percentage, validation_percentage):
     for data in data_set:
         for file_name in data_set[data]:
             if file_name not in image_set:
-                image_set[file_name]=[0,0,0,0]
+                image_set[file_name] = [0, 0, 0, 0]
             if data == 'huochuan':
                 image_set[file_name][0] = 1
             elif data == 'youting':
@@ -225,7 +234,7 @@ def create_image_sets(label, testing_percentage, validation_percentage):
     validation_images = {}
     for file_name in image_set:
         # print('image '+file_name+' label is: '+str(image_set[file_name]))
-        all_images[file_name]=image_set[file_name]
+        all_images[file_name] = image_set[file_name]
         # 随机将数据分到训练数据集、测试数据集和验证数据集。
         chance = np.random.randint(100)
         if chance < validation_percentage:
@@ -269,7 +278,7 @@ def create_one_label_lists(label_name, testing_percentage, validation_percentage
 
     print('total_num:' + str(len(image_set.keys())))
     for image in image_set:
-        print(image+str(image_set[image]))
+        print(image + str(image_set[image]))
     return result
 
 
@@ -336,17 +345,17 @@ def get_image(image_lists, index):
     # 根据所属数据集的名称获取集合中的全部图片信息。
     mod_index = index % len(image_lists)
     # 获取图片的文件名。list(image_lists.keys())[label_index]
-    image_full_name= list(image_lists.keys())[mod_index]
-    ground_truth=image_lists[image_full_name]
-    return image_full_name,ground_truth
+    image_full_name = list(image_lists.keys())[mod_index]
+    ground_truth = image_lists[image_full_name]
+    return image_full_name, ground_truth
 
 
 # 这个函数通过类别名称、所属数据集和图片编号获取经过Inception-v3模型处理之后的特征向量文件地址。
 def get_bottlenect(image_lists, index):
     # 获取图片的文件名。
-    image_full_name,ground_truth = get_image(image_lists, index)
+    image_full_name, ground_truth = get_image(image_lists, index)
     bottlenect_full_name = image_full_name.replace(INPUT_DATA, CACHE_DIR)
-    return bottlenect_full_name + '.txt',ground_truth
+    return bottlenect_full_name + '.txt', ground_truth
 
 
 # 这个函数使用加载的训练好的Inception-v3模型处理一张图片，得到这个图片的特征向量。
@@ -363,7 +372,7 @@ def run_bottleneck_on_image(sess, image_data, image_data_tensor, bottleneck_tens
 def get_or_create_bottleneck(sess, image_lists, index, jpeg_data_tensor, bottleneck_tensor):
     # 获取一张图片对应的特征向量文件的路径。
     # label_lists = image_lists[image_name]
-    bottleneck_full_name,ground_truth = get_bottlenect(image_lists, index)
+    bottleneck_full_name, ground_truth = get_bottlenect(image_lists, index)
     # print('bottleneck: ' + str(bottleneck_full_name))
     # print('ground_truth: ' + str(ground_truth))
 
@@ -373,7 +382,7 @@ def get_or_create_bottleneck(sess, image_lists, index, jpeg_data_tensor, bottlen
     # 如果这个特征向量文件不存在，则通过Inception-v3模型来计算特征向量，并将计算的结果存入文件。
     if not os.path.exists(bottleneck_full_name):
         # 获取原始的图片路径
-        image_full_name,_ = get_image(image_lists, index)
+        image_full_name, _ = get_image(image_lists, index)
         # 获取图片内容。
         image_data = gfile.FastGFile(image_full_name, 'rb').read()
         # print(len(image_data))
@@ -406,8 +415,8 @@ def get_random_cached_bottlenecks(sess, n_classes, image_sets, how_many, categor
         image_lists = image_sets[category]
         # print(image_lists.sets()[1])
         ground_truth = np.zeros(n_classes, dtype=np.float32)
-        bottleneck, ground_truth= get_or_create_bottleneck(sess, image_lists, image_index,
-                                                           jpeg_data_tensor, bottleneck_tensor)
+        bottleneck, ground_truth = get_or_create_bottleneck(sess, image_lists, image_index,
+                                                            jpeg_data_tensor, bottleneck_tensor)
         # ground_truth[label_index] = 1.0
         bottlenecks.append(bottleneck)
         ground_truths.append(ground_truth)
