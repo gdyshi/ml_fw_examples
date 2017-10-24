@@ -23,7 +23,7 @@ BOTTLENECK_TENSOR_NAME = 'pool_3/_reshape:0'
 JPEG_DATA_TENSOR_NAME = 'DecodeJpeg/contents:0'
 
 COMMON_DIR = 'E:\data'
-COMMON_DIR = 'F:\\tmp\\bdci\\fangyi'
+# COMMON_DIR = 'F:\\tmp\\bdci\\fangyi'
 
 # 下载的谷歌训练好的Inception-v3模型文件目录
 MODEL_DIR = COMMON_DIR + '\model'
@@ -51,12 +51,13 @@ TEST_PERCENTAGE = 10
 
 # 定义神经网络的设置
 LEARNING_RATE = 0.005
-STEPS = 10000
+STEPS = 30000
 BATCH = 100
 
-
+# 预处理数据集到数据库
 def format_data_set():
     file_list = []
+    c, conn = create_db('test.db')
 
     # 获取当前目录下所有的标记文件
     g = os.walk(INPUT_LABLE)
@@ -65,7 +66,6 @@ def format_data_set():
         for file in files:
             filename = os.path.join(paths, file)
             file_list.append(filename)
-    c, conn = create_db()
 
     for file in file_list:
         f = open(file)  # 返回一个文件对象
@@ -77,21 +77,20 @@ def format_data_set():
             listFromLine = line.lstrip().rstrip().split(' ')
             # 检查label是否是6段
             if (6 != len(listFromLine)):
-                print('error: label not 6:' + file + 'but ' + str(len(listFromLine)) + 'line:' + str(line_num))
+                print('fatal error: label not 6:' + file + 'but ' + str(len(listFromLine)) + 'line:' + str(line_num))
                 print(listFromLine[6])
                 exit(-1)
             # 检查文件名与label是否一致
             if -1 == file.find(listFromLine[1]):
-                print('error: label not matched file name:' + file + 'line:' + str(line_num))
+                print('fatal error: label not matched file name:' + file + 'line:' + str(line_num))
                 exit(-1)
             classify = listFromLine[1]
             # 检查对应图片是否存在
             image_file = get_real_img_name(listFromLine[0])
             if False == os.path.exists(image_file):
-                print('error: image:' + image_file + ' not found from label:' + file + 'line:' + str(line_num))
+                print('fatal error: image:' + image_file + ' not found from label:' + file + 'line:' + str(line_num))
                 exit(-1)
             image_id = update_image_table(c, image_file)
-
             classify_id = update_classify_table(c, classify)
             # # 拷贝有效图片
             # to_image_file = image_file.replace(INPUT_DATA, TEMP_DATA_ALL)
@@ -115,7 +114,6 @@ def format_data_set():
             if (x < int(listFromLine[2]) or x < int(listFromLine[4]) or y < int(listFromLine[3]) or y < int(
                     listFromLine[5])):
                 print('error: label outofrange, img:' + file + 'line:' + str(line_num))
-                # exit(-1)
             if (x < lx):
                 lx = x
             if (x < rx):
@@ -136,77 +134,67 @@ def format_data_set():
                 ry = ly
                 ly = temp
             insert_lable_table(c, classify_id, image_id, lx, ly, rx, ry)
-            # conn.commit()
             line = f.readline()
         f.close()
     create_dtset_from_db(c)
     conn.commit()
     conn.close()
 
-
+# 创建训练集、验证集和数据集
 def create_dtset_from_db(c):
     cursor = c.execute("SELECT id  from IMAGE_ALL")
     result = cursor.fetchall()
-    print(result)
     for row in result:
         chance = np.random.randint(100)
         id = row[0]
         if chance < VALIDATION_PERCENTAGE:
-            print('valid')
             sqlstr = str("INSERT INTO IMAGE_VALID (IMAGE_ID)  VALUES (\"" + str(id) + "\" )")
         elif chance < (TEST_PERCENTAGE + VALIDATION_PERCENTAGE):
-            print('test')
             sqlstr = str("INSERT INTO IMAGE_TEST (IMAGE_ID)  VALUES (\"" + str(id) + "\" )")
         else:
-            print('train')
             sqlstr = str("INSERT INTO IMAGE_TRAIN (IMAGE_ID)  VALUES (\"" + str(id) + "\" )")
         c.execute(sqlstr)
 
-
+# 插入数据到标签表中
 def insert_lable_table(c, classify_id, image_id, lx, ly, rx, ry):
     sqlstr = str("INSERT INTO LABEL (IMAGE_ID,CLASSIFY_ID,LX,LY,RX,RY) \
                   VALUES (\"" + str(image_id) + "\", \"" + str(classify_id) + "\", " + str(lx) + ", " + str(
         ly) + ", " + str(rx) + ", " + str(ry) + " )")
     c.execute(sqlstr)
 
-
+# 更新分类表，返回id
 def update_classify_table(c, classify):
-    sqlstr = str("SELECT id  from CLASSIFY WHERE NAME=\"" + classify + "\"")
-    cursor = c.execute(sqlstr)
+    select_sqlstr = str("SELECT id  from CLASSIFY WHERE NAME=\"" + classify + "\"")
+    cursor = c.execute(select_sqlstr)
     result = cursor.fetchone()
     if result == None:
-        sqlstr = str("INSERT INTO CLASSIFY (NAME)  VALUES (\"" + classify + "\" )")
-        cursor = c.execute(sqlstr)
-        # conn.commit()
-        sqlstr = str("SELECT id  from CLASSIFY WHERE NAME=\"" + classify + "\"")
-        cursor = c.execute(sqlstr)
+        insert_sqlstr = str("INSERT INTO CLASSIFY (NAME)  VALUES (\"" + classify + "\" )")
+        cursor = c.execute(insert_sqlstr)
+        cursor = c.execute(select_sqlstr)
         classify_id = cursor.fetchone()[0]
     else:
         classify_id = result[0]
-
     return classify_id
 
-
+# 更新图片表，返回id
 def update_image_table(c, image_file):
-    sqlstr = str("SELECT id  from IMAGE_ALL WHERE PATH=\"" + image_file + "\"")
-    cursor = c.execute(sqlstr)
+    select_sqlstr = str("SELECT id  from IMAGE_ALL WHERE PATH=\"" + image_file + "\"")
+    cursor = c.execute(select_sqlstr)
     result = cursor.fetchone()
     if result == None:
-        sqlstr = str("INSERT INTO IMAGE_ALL (PATH)  VALUES (\"" + image_file + "\" )")
-        cursor = c.execute(sqlstr)
-        # conn.commit()
-        sqlstr = str("SELECT id  from IMAGE_ALL WHERE PATH=\"" + image_file + "\"")
-        cursor = c.execute(sqlstr)
+        insert_sqlstr = str("INSERT INTO IMAGE_ALL (PATH)  VALUES (\"" + image_file + "\" )")
+        cursor = c.execute(insert_sqlstr)
+        cursor = c.execute(select_sqlstr)
         image_id = cursor.fetchone()[0]
     else:
         image_id = result[0]
     return image_id
 
-
-def create_db():
-    if os.path.exists('test.db'):
-        os.remove('test.db')
-    conn = sqlite3.connect('test.db')
+# 创建数据库
+def create_db(db_name):
+    if os.path.exists(db_name):
+        os.remove(db_name)
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     c.execute('''CREATE TABLE IMAGE_ALL
            (ID INTEGER PRIMARY KEY     AUTOINCREMENT,
@@ -222,6 +210,7 @@ def create_db():
            LY        INT NOT NULL,
            RX        INT NOT NULL,
            RY        INT NOT NULL);''')
+
     c.execute('''CREATE VIEW [VIEW_ALL]
             AS
             SELECT [IMAGE_ALL].[PATH] AS [IMAGE_ALL],
@@ -354,202 +343,59 @@ def create_db():
     return c, conn
 
 
-# 这个函数从数据文件夹中读取所有的图片列表并按训练、验证、测试数据分开。
-# testing_percentage和validation_percentage参数指定了测试数据集和验证数据集的大小。
-def create_image_lists(testing_percentage, validation_percentage):
-    # 得到的所有图片都存在result这个字典(dictionary)里。
-    # 这个字典的key为类别的名称，value也是一个字典，字典里存储了所有的图片名称。
-    result = {}
-    data_set = get_data_set()
-    for data in data_set:
-        training_images = []
-        testing_images = []
-        validation_images = []
-        all_images = []
-        for file_name in data_set[data]:
-            all_images.append(file_name)
-            # 随机将数据分到训练数据集、测试数据集和验证数据集。
-            chance = np.random.randint(100)
-            if chance < validation_percentage:
-                validation_images.append(file_name)
-            elif chance < (testing_percentage + validation_percentage):
-                testing_images.append(file_name)
-            else:
-                training_images.append(file_name)
-            # 将当前类别的数据放入结果字典。
-            result[data] = {
-                'training': training_images,
-                'validation': validation_images,
-                'testing': testing_images,
-                'all': all_images,
-            }
-
-        print('label:' + data)
-        print('\ttotal_num:' + str(len(all_images)))
-        print('\ttraining_num:' + str(len(training_images)))
-        print('\tvalidation_num:' + str(len(validation_images)))
-        print('\ttesting_num:' + str(len(testing_images)))
-    return result
-
-
-# 这个函数从数据文件夹中读取所有的图片列表并按训练、验证、测试数据分开。
-# testing_percentage和validation_percentage参数指定了测试数据集和验证数据集的大小。
+# 从数据库中读取所有的图片集合。
 def create_image_sets():
-    image_set = {}
     all_images = {}
-    training_images = {}
-    testing_images = {}
-    validation_images = {}
-
     conn = sqlite3.connect('test.db')
     c = conn.cursor()
 
-    cursor = c.execute("SELECT IMAGE_ID  from IMAGE_VALID")
-    result = cursor.fetchall()
-    for row in result:
-        image_id = row[0]
-        sqlstr = str("SELECT IMAGE_ALL, CLASSIFY_ID, LX, LY, RX, RY from SET_VALID WHERE IMAGE_ID = \""+str(image_id)+"\"")
-        cursor1 = c.execute(sqlstr)
-        result1 = cursor1.fetchall()
-        for row1 in result1:
-            path = row1[0]
-            classfiy_id = row1[1]
-            lx = row1[2]
-            ly = row1[3]
-            rx = row1[4]
-            ry = row1[5]
-            if path not in validation_images:
-                validation_images[path] = [0, 0, 0, 0]
-            if 1 == classfiy_id:
-                validation_images[path][0] = 1
-            elif 2 == classfiy_id:
-                validation_images[path][1] = 1
-            elif 3 == classfiy_id:
-                validation_images[path][2] = 1
-            elif 4 == classfiy_id:
-                validation_images[path][3] = 1
-            # validation_images[path].append({'classfiy_id':classfiy_id,'lx':lx,'ly':ly,'rx':rx,'ry':ry})
-    cursor = c.execute("SELECT IMAGE_ID  from IMAGE_TEST")
-    result = cursor.fetchall()
-    for row in result:
-        image_id = row[0]
-        sqlstr = str("SELECT IMAGE_ALL, CLASSIFY_ID, LX, LY, RX, RY from SET_TEST WHERE IMAGE_ID = \""+str(image_id)+"\"")
-        cursor1 = c.execute(sqlstr)
-        result1 = cursor1.fetchall()
-        for row1 in result1:
-            path = row1[0]
-            classfiy_id = row1[1]
-            lx = row1[2]
-            ly = row1[3]
-            rx = row1[4]
-            ry = row1[5]
-            if path not in testing_images:
-                testing_images[path] = [0, 0, 0, 0]
-            if 1 == classfiy_id:
-                testing_images[path][0] = 1
-            elif 2 == classfiy_id:
-                testing_images[path][1] = 1
-            elif 3 == classfiy_id:
-                testing_images[path][2] = 1
-            elif 4 == classfiy_id:
-                testing_images[path][3] = 1
-    cursor = c.execute("SELECT IMAGE_ID  from IMAGE_TRAIN")
-    result = cursor.fetchall()
-    for row in result:
-        image_id = row[0]
-        sqlstr = str("SELECT IMAGE_ALL, CLASSIFY_ID, LX, LY, RX, RY from SET_TRAIN WHERE IMAGE_ID = \""+str(image_id)+"\"")
-        cursor1 = c.execute(sqlstr)
-        result1 = cursor1.fetchall()
-        for row1 in result1:
-            path = row1[0]
-            classfiy_id = row1[1]
-            lx = row1[2]
-            ly = row1[3]
-            rx = row1[4]
-            ry = row1[5]
-            if path not in training_images:
-                training_images[path] = [0, 0, 0, 0]
-            if 1 == classfiy_id:
-                training_images[path][0] = 1
-            elif 2 == classfiy_id:
-                training_images[path][1] = 1
-            elif 3 == classfiy_id:
-                training_images[path][2] = 1
-            elif 4 == classfiy_id:
-                training_images[path][3] = 1
+    validation_images = create_set(c, 'VALID')
+    testing_images = create_set(c, 'TEST')
+    training_images = create_set(c, 'TRAIN')
     conn.close()
-
     result = {
         'training': training_images,
         'validation': validation_images,
         'testing': testing_images,
         'all': all_images,
     }
-    # print(result)
     print('\ttotal_num:' + str(len(result['all'])))
     print('\ttraining_num:' + str(len(result['training'])))
     print('\tvalidation_num:' + str(len(result['validation'])))
     print('\ttesting_num:' + str(len(result['testing'])))
-
     return result
 
 
-# 这个函数从数据文件夹中读取所有的图片列表并按训练、验证、测试数据分开。
-# testing_percentage和validation_percentage参数指定了测试数据集和验证数据集的大小。
-def create_one_label_lists(label_name, testing_percentage, validation_percentage):
-    # 得到的所有图片都存在result这个字典(dictionary)里。
-    # 这个字典的key为类别的名称，value也是一个字典，字典里存储了所有的图片名称。
-    result = {}
-    data_set = get_data_set()
-    image_set = {}
-    for data in data_set:
-        for file_name in data_set[data]:
-            if file_name in image_set.keys():
-                image_set[file_name].append(data)
-            else:
-                image_set[file_name] = [data]
-
-    print('total_num:' + str(len(image_set.keys())))
-    for image in image_set:
-        print(image + str(image_set[image]))
-    return result
-
-
-def get_data_set():
-    data_set = {}
-    file_list = []
-    # 获取当前目录下所有的标记文件
-    g = os.walk(INPUT_LABLE)
-    for paths, _, files in g:
-        for file in files:
-            filename = os.path.join(paths, file)
-            file_list.append(filename)
-    huochuan_list = []
-    youlun_list = []
-    youting_list = []
-    yuchuan_list = []
-    # print(file_list)
-    for file in file_list:
-        f = open(file)  # 返回一个文件对象
-        line = f.readline()  # 调用文件的 readline()方法
-        # 通过文件内容获取类别的名称。
-        while line:
-            listFromLine = line.split(' ')
-            if ('huochuan' == listFromLine[1]):
-                huochuan_list.append(get_real_img_name(listFromLine[0]))
-            if ('youlun' == listFromLine[1]):
-                youlun_list.append(get_real_img_name(listFromLine[0]))
-            if ('youting' == listFromLine[1]):
-                youting_list.append(get_real_img_name(listFromLine[0]))
-            if ('yuchuan' == listFromLine[1]):
-                yuchuan_list.append(get_real_img_name(listFromLine[0]))
-            line = f.readline()
-        f.close()
-    data_set['huochuan'] = huochuan_list
-    data_set['youlun'] = youlun_list
-    data_set['youting'] = youting_list
-    data_set['yuchuan'] = yuchuan_list
-    return data_set
+def create_set(c, set_name):
+    images = {}
+    sqlstr = str("SELECT IMAGE_ID  from IMAGE_" + set_name)
+    cursor = c.execute(sqlstr)
+    result = cursor.fetchall()
+    for row in result:
+        image_id = row[0]
+        sqlstr = str(
+            "SELECT IMAGE_ALL, CLASSIFY_ID, LX, LY, RX, RY from SET_" + set_name+" WHERE IMAGE_ID = \"" + str(image_id) + "\"")
+        cursor1 = c.execute(sqlstr)
+        result1 = cursor1.fetchall()
+        for row1 in result1:
+            path = row1[0]
+            classfiy_id = row1[1]
+            lx = row1[2]
+            ly = row1[3]
+            rx = row1[4]
+            ry = row1[5]
+            if path not in images:
+                images[path] = [0, 0, 0, 0]
+            if 1 == classfiy_id:
+                images[path][0] = 1
+            elif 2 == classfiy_id:
+                images[path][1] = 1
+            elif 3 == classfiy_id:
+                images[path][2] = 1
+            elif 4 == classfiy_id:
+                images[path][3] = 1
+                # images[path].append({'classfiy_id':classfiy_id,'lx':lx,'ly':ly,'rx':rx,'ry':ry})
+    return images
 
 
 # 替换标记文件中记录的图片路径为真实的图片路径
@@ -642,15 +488,11 @@ def get_random_cached_bottlenecks(sess, n_classes, image_sets, how_many, categor
     ground_truths = []
     for _ in range(how_many):
         # 随机一个图片的编号加入当前的训练数据。
-        # label_index = random.randrange(n_classes)
-        # image_name = list(image_lists.keys())[label_index]
         image_index = random.randrange(65536)
         image_lists = image_sets[category]
-        # print(image_lists.sets()[1])
         ground_truth = np.zeros(n_classes, dtype=np.float32)
         bottleneck, ground_truth = get_or_create_bottleneck(sess, image_lists, image_index,
                                                             jpeg_data_tensor, bottleneck_tensor)
-        # ground_truth[label_index] = 1.0
         bottlenecks.append(bottleneck)
         ground_truths.append(ground_truth)
     return bottlenecks, ground_truths
@@ -711,21 +553,19 @@ def main(_):
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
-        # if os.path.exists(PARM_FILE + '.index'):
-        #     # 从文件中恢复变量
-        #     saver.restore(sess, PARM_FILE)
-        #     print("Model restored.")
-        # else:
-        #     print("Model inited.")
-        #     # sess.run(init)
-        tf.global_variables_initializer().run()
-
+        if os.path.exists(PARM_FILE + '.index'):
+            # 从文件中恢复变量
+            saver.restore(sess, PARM_FILE)
+            print("Model restored.")
+        else:
+            print("Model inited.")
+            tf.global_variables_initializer().run()
         # 训练过程
         for i in range(STEPS):
             # 每次获取一个batch的训练数据
             train_bottlenecks, train_ground_truth = get_random_cached_bottlenecks(
                 sess, n_classes, image_lists, BATCH, 'training', jpeg_data_tensor, bottleneck_tensor)
-            sess.run(train_step,
+            _, lossval = sess.run([train_step,cross_entropy_mean],
                      feed_dict={bottleneck_input: train_bottlenecks, ground_truth_input: train_ground_truth})
             # 在验证集上测试正确率。
             if i % 100 == 0 or i + 1 == STEPS:
@@ -735,10 +575,10 @@ def main(_):
                     bottleneck_input: validation_bottlenecks, ground_truth_input: validation_ground_truth})
                 print('Step %d: Validation accuracy on random sampled %d examples = %.1f%%'
                       % (i, BATCH, validation_accuracy * 100))
-                # # 存储变量到文件
-                # if i % 1000 == 0:
-                #     save_path = saver.save(sess, PARM_FILE)
-                #     print("Model saved in file: ", save_path)
+                # 存储变量到文件
+                if i % 1000 == 0:
+                    save_path = saver.save(sess, PARM_FILE)
+                    print("Model saved in file: ", save_path)
 
         # 在最后的测试数据上测试正确率
         test_bottlenecks, test_ground_truth = get_test_bottlenecks(sess, image_lists, n_classes,
