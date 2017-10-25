@@ -51,7 +51,7 @@ TEST_PERCENTAGE = 10
 
 # 定义神经网络的设置
 LEARNING_RATE = 0.005
-STEPS = 30000
+STEPS = 40000
 BATCH = 100
 
 # 预处理数据集到数据库
@@ -560,6 +560,7 @@ def main(_):
         else:
             print("Model inited.")
             tf.global_variables_initializer().run()
+        sumloss = 0.0
         # 训练过程
         for i in range(STEPS):
             # 每次获取一个batch的训练数据
@@ -567,14 +568,16 @@ def main(_):
                 sess, n_classes, image_lists, BATCH, 'training', jpeg_data_tensor, bottleneck_tensor)
             _, lossval = sess.run([train_step,cross_entropy_mean],
                      feed_dict={bottleneck_input: train_bottlenecks, ground_truth_input: train_ground_truth})
+            sumloss = sumloss + lossval
             # 在验证集上测试正确率。
             if i % 100 == 0 or i + 1 == STEPS:
                 validation_bottlenecks, validation_ground_truth = get_random_cached_bottlenecks(
                     sess, n_classes, image_lists, BATCH, 'validation', jpeg_data_tensor, bottleneck_tensor)
                 validation_accuracy = sess.run(evaluation_step, feed_dict={
                     bottleneck_input: validation_bottlenecks, ground_truth_input: validation_ground_truth})
-                print('Step %d: Validation accuracy on random sampled %d examples = %.1f%%'
-                      % (i, BATCH, validation_accuracy * 100))
+                print('Step %d: batch sum loss:%.2f Validation accuracy on random sampled %d examples = %.1f%%'
+                      % (i, sumloss, BATCH, validation_accuracy * 100))
+                sumloss = 0.0
                 # 存储变量到文件
                 if i % 1000 == 0:
                     save_path = saver.save(sess, PARM_FILE)
